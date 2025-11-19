@@ -1,3 +1,27 @@
+# VS Code — Commit‑Message Vorschläge (kurz)
+# 1) Extensions installieren (Marketplace):
+#    - GitHub Copilot (für AI‑Vorschläge)
+#    - GitLens — Git super tools (optional)
+#    - GitHub Pull Requests and Issues (für PR‑Suggestions)
+#    - Commitizen / commitlint (für strukturierte Commit‑Messages, optional)
+#
+# 2) Wichtige Einstellungen (User/Workspace settings):
+#    - editor.inlineSuggest.enabled = true
+#    - Falls GitHub Copilot installiert: aktiviere Inline Suggestions in den Copilot‑Einstellungen
+#      (z. B. "GitHub Copilot: Enable" / "Inline Suggestions" in den Extension Settings).
+#
+# 3) Nutzung:
+#    - Öffne Source Control → Commit Message Feld.
+#    - Warte auf die Inline‑Vorschläge (Copilot) oder rufe die Vorschläge per Shortcut auf.
+#    - Vorschlag mit Tab / Accept‑Key übernehmen, bei Bedarf anpassen und committen.
+#
+# 4) Alternative / Workflow:
+#    - Nutze Commitizen + husky Hooks für standardisierte Commit‑Prompts.
+#    - Auf GitHub Web: Reviewer können "Suggested changes" machen; mit "Commit suggestion" in der PR anwenden.
+#
+# Kurz: installiere Copilot (oder eine AI‑Erweiterung), aktiviere inline suggestions, dann werden Vorschläge
+# auch im Commit‑Message Feld angezeigt und können übernommen werden.
+
 import streamlit as st
 import plotly.graph_objects as go
 import pbgui_help
@@ -953,7 +977,16 @@ class BacktestV7Result:
         self.ed = self.config.backtest.end_date
         self.adg = self.result["adg"]
         self.drawdown_worst = self.result["drawdown_worst"]
-        self.equity_balance_diff_neg_max = self.result["equity_balance_diff_neg_max"]
+        # safe read: prefer numeric value, fallback to None if missing/invalid
+        self.equity_balance_diff_neg_max = None
+        if isinstance(self.result, dict):
+            val = self.result.get("equity_balance_diff_neg_max")
+            if val not in (None, ""):
+                try:
+                    self.equity_balance_diff_neg_max = float(val)
+                except (TypeError, ValueError):
+                    # leave as None if conversion fails
+                    pass
         self.sharpe_ratio = self.result["sharpe_ratio"]
         self.starting_balance = self.config.backtest.starting_balance
         self.be = None
@@ -1643,7 +1676,7 @@ class BacktestV7Results:
                 else:
                     # remove backtests path
                     result_path = result_path.replace(f'{pb7dir()}/backtests/pbgui/', '')
-                # target = result.config.backtest.base_dir.split('/')[-1]
+                # target = result.config.backtest.base_dir.split('/')[-1];
                 if not fnmatch.fnmatch(result_path.lower(), self.filter.lower()):
                     self.results.remove(result)
 
@@ -2000,181 +2033,3 @@ class BacktestV7Results:
             st.plotly_chart(self.compare_fig, key=f"backtest_v7_compare_be")
             if view_btc:
                 st.plotly_chart(self.compare_fig_btc, key=f"backtest_v7_compare_be_btc")
-
-class BacktestsV7:
-    def __init__(self):
-        self.backtests = []
-        self.d = []
-        self.sort = "Time"
-        self.sort_order = True
-        self.load_sort()
-
-    def view_backtests(self):
-        # Init
-        if not self.backtests:
-            self.find_backtests()
-        if not "ed_key" in st.session_state:
-            st.session_state.ed_key = 0
-        ed_key = st.session_state.ed_key
-        if not self.d:
-            for id, bt in enumerate(self.backtests):
-                self.d.append({
-                    'id': id,
-                    'Select': False,
-                    'Results': bt.results.calculate_results(),
-                    'Name': bt.name,
-                    'Time': datetime.datetime.fromtimestamp(bt.date),
-                    'Exchange': bt.config.backtest.exchanges,
-                    'item': bt,
-                })
-        column_config = {
-            "id": None,
-            "item": None,
-            "Select": st.column_config.CheckboxColumn(label="Select"),
-            "Time": st.column_config.DatetimeColumn(label="Time", format="YYYY-MM-DD HH:mm:ss"),
-            }
-        # Display Backtests
-        if "sort_bt_v7" in st.session_state:
-            if st.session_state.sort_bt_v7 != self.sort:
-                self.sort = st.session_state.sort_bt_v7
-                self.save_sort()
-        else:
-            st.session_state.sort_bt_v7 = self.sort
-        if "sort_bt_v7_order" in st.session_state:
-            if st.session_state.sort_bt_v7_order != self.sort_order:
-                self.sort_order = st.session_state.sort_bt_v7_order
-                self.save_sort()
-        else:
-            st.session_state.sort_bt_v7_order = self.sort_order
-        # Display sort options
-        col1, col2 = st.columns([1, 9], vertical_alignment="bottom")
-        with col1:
-            st.selectbox("Sort by:", ['Time', 'Name', 'Results', 'Exchange'], key=f'sort_bt_v7', index=0)
-        with col2:
-            st.checkbox("Reverse", value=True, key=f'sort_bt_v7_order')
-        self.d = sorted(self.d, key=lambda x: x[st.session_state[f'sort_bt_v7']], reverse=st.session_state[f'sort_bt_v7_order'])
-        height = 36+(len(self.d))*35
-        if height > 1000: height = 1016
-        st.data_editor(data=self.d, height=height, key=f'select_backtest_v7_{ed_key}', hide_index=None, column_order=None, column_config=column_config, disabled=['id','name'])
-
-    def load_sort(self):
-        pb_config = configparser.ConfigParser()
-        pb_config.read('pbgui.ini')
-        self.sort = pb_config.get("backtest_v7", "sort") if pb_config.has_option("backtest_v7", "sort") else "Time"
-        self.sort_order = eval(pb_config.get("backtest_v7", "sort_order")) if pb_config.has_option("backtest_v7", "sort_order") else True
-
-    def save_sort(self):
-        pb_config = configparser.ConfigParser()
-        pb_config.read('pbgui.ini')
-        if not pb_config.has_section("backtest_v7"):
-            pb_config.add_section("backtest_v7")
-        pb_config.set("backtest_v7", "sort", str(self.sort))
-        pb_config.set("backtest_v7", "sort_order", str(self.sort_order))
-        with open('pbgui.ini', 'w') as f:
-            pb_config.write(f)
-
-    def find_backtests(self):
-        self.backtests = []
-        p = str(Path(f'{PBGDIR}/data/bt_v7/**/backtest.json'))
-        found_bt = glob.glob(p, recursive=False)
-        if found_bt:
-            for p in found_bt:
-                bt = BacktestV7Item(p)
-                self.backtests.append(bt)
-
-    def view_selected(self):
-        ed_key = st.session_state.ed_key
-        ed = st.session_state[f'select_backtest_v7_{ed_key}']
-        # Get number of selected results
-        selected_count = sum(1 for row in ed["edited_rows"] if "Select" in ed["edited_rows"][row] and ed["edited_rows"][row]["Select"])
-        if selected_count == 0:
-            error_popup("No Backtests selected")
-            return
-        elif selected_count > 1:
-            error_popup("Please select only one Backtest to view")
-            return
-        for row in ed["edited_rows"]:
-            if "Select" in ed["edited_rows"][row]:
-                if ed["edited_rows"][row]["Select"]:
-                    st.session_state.bt_v7_results = self.d[row]["item"].results
-                    st.rerun()
-
-    def edit_selected(self):
-        ed_key = st.session_state.ed_key
-        ed = st.session_state[f'select_backtest_v7_{ed_key}']
-        # Get number of selected results
-        selected_count = sum(1 for row in ed["edited_rows"] if "Select" in ed["edited_rows"][row] and ed["edited_rows"][row]["Select"])
-        if selected_count == 0:
-            error_popup("No Backtests selected")
-            return
-        elif selected_count > 1:
-            error_popup("Please select only one Backtest to view")
-            return
-        for row in ed["edited_rows"]:
-            if "Select" in ed["edited_rows"][row]:
-                if ed["edited_rows"][row]["Select"]:
-                    st.session_state.bt_v7 = self.d[row]["item"]
-                    st.rerun()
-
-    @st.dialog("No Backtest selected. Delete all?")
-    def remove_all(self):
-        st.warning(f"Delete all Backtests?", icon="⚠️")
-        # reason = st.text_input("Because...")
-        col1, col2 = st.columns([1,1])
-        with col1:
-            if st.button(":green[Yes]"):
-                rmtree(f'{PBGDIR}/data/bt_v7', ignore_errors=True)
-                if "bt_v7_remove_results" in st.session_state:
-                    if st.session_state.bt_v7_remove_results:
-                        for bt in self.backtests:
-                            bt.results.remove_all_results()
-                self.d = []
-                self.backtests = []
-                st.rerun()
-        with col2:
-            if st.button(":red[No]"):
-                st.rerun()
-
-    def remove_selected(self):
-        ed_key = st.session_state.ed_key
-        ed = st.session_state[f'select_backtest_v7_{ed_key}']
-        # Get number of selected results
-        selected_count = sum(1 for row in ed["edited_rows"] if "Select" in ed["edited_rows"][row] and ed["edited_rows"][row]["Select"])
-        if selected_count == 0:
-            self.remove_all()
-            return
-        for row in ed["edited_rows"]:
-            if "Select" in ed["edited_rows"][row]:
-                if ed["edited_rows"][row]["Select"]:
-                    self.d[row]["item"].remove()
-                    if "bt_v7_remove_results" in st.session_state:
-                        if st.session_state.bt_v7_remove_results:
-                            self.d[row]["item"].results.remove_all_results()
-        self.d = []
-        self.backtests = []
-        st.rerun()
-
-def main():
-    # Disable Streamlit Warnings when running directly
-    logging.getLogger("streamlit.runtime.state.session_state_proxy").disabled=True
-    logging.getLogger("streamlit.runtime.scriptrunner_utils.script_run_context").disabled=True
-    bt = BacktestV7Queue()
-    while True:
-        bt.load()
-        for item in bt.items:
-            while bt.running() >= bt.cpu:
-                time.sleep(5)
-            while bt.downloading():
-                time.sleep(5)
-            pb_config = configparser.ConfigParser()
-            pb_config.read('pbgui.ini')
-            if not eval(pb_config.get("backtest_v7", "autostart")):
-                return
-            if item.status() == "not started":
-                print(f'{datetime.datetime.now().isoformat(sep=" ", timespec="seconds")} Backtesting {item.filename} started')
-                item.run()
-                time.sleep(1)
-        time.sleep(15)
-
-if __name__ == '__main__':
-    main()
